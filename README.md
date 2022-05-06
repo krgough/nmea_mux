@@ -1,6 +1,6 @@
 # nmea_mux - NMEA Multiplexor
 
-Takea NMEA data from Serial Ports, TCP Sockets or UDP Sockets and Multiplex's that data out via a TCP socket on port 10110 and a UDP Broadcast on port 10110.
+Takes NMEA data from Serial Ports, TCP Sockets or UDP Sockets and Multiplex's that data out via a TCP socket on port 10110 and a UDP Broadcast on port 10110.
 Port 10110 is the standard port for NMEA data.  Navionics can be setup to connect via TCP or UDP and listen to the multiplexed data.
 
 ```
