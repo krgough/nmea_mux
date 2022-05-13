@@ -19,6 +19,8 @@ import time
 
 import serial
 
+import nmea_config as cfg
+
 DEBUG = True
 
 LOGGER = logging.getLogger(__name__)
@@ -30,30 +32,6 @@ THREAD_POOL = []
 
 # Max socket buffer size
 BUFFER_SIZE = 1024
-
-INPUT_TCP_PORT = 5000
-INPUT_TCP_ADDRESS = ("", INPUT_TCP_PORT)
-
-NMEA_PORT = 10110
-NMEA_UDP_MUX = ("255.255.255.255", NMEA_PORT)
-
-NMEA_TCP_MUX = ("", NMEA_PORT)
-
-SERIAL_LISTENERS = [
-    # ("/dev/null", 115200),
-]
-
-TCP_LISTENERS = [
-    INPUT_TCP_ADDRESS,
-]
-
-MUX_OUPUTS = [
-    # NMEA_UDP_MUX,
-    NMEA_TCP_MUX,
-]
-
-SERIAL_PORT = "/dev/tty.usbserial-FT9FV3Y3"
-SERIAL_PORT_BAUD = 9600
 
 MESSAGE_QUEUES = {}
 MAX_QUEUE_SIZE = 3
@@ -83,34 +61,54 @@ def flush_queue(my_queue):
         pass
 
 
-def serial_port_worker(port, baud):
+def serial_port_worker(addr, baud, mux=False):
     """Listen for data on a serial port and send it to any mux channels"""
-    LOGGER.debug("Starting derial port on %s", port)
-    ser = open_serial_port(port=port, baud=baud)
+    LOGGER.debug("Starting serial port on %s", addr)
+    ser = open_serial_port(port=addr, baud=baud)
     if ser is None:
         STOP_THREADS.set()
+    MESSAGE_QUEUES[addr] = queue.Queue(MAX_QUEUE_SIZE)
 
     while not STOP_THREADS.is_set():
-        try:
-            data = ser.readline()
-        except serial.SerialException as err:
-            LOGGER.error("Serial port error %s: %s", port, err)
-            STOP_THREADS.set()
+
+        if mux:
+            # Read from out message queue and send those to the serial port
+            try:
+                data = MESSAGE_QUEUES[addr].get(timeout=1)
+            except queue.Empty:
+                pass
+
+            else:
+                LOGGER.debug("Sending to Serial MUX: %s, %s", addr, data)
+                try:
+                    ser.write(data + b"\r")
+                except serial.SerialException as err:
+                    LOGGER.error(err)
+
         else:
-            LOGGER.debug("Serial Data: %s", data)
-            if data:
-                for _, mux in MESSAGE_QUEUES.items():
-                    mux.put(data)
+            # Read from the port and put messages onto any mux channels
+            try:
+                data = ser.readline()
+            except serial.SerialException as err:
+                LOGGER.error("Serial port error %s: %s", addr, err)
+                STOP_THREADS.set()
+            else:
+                LOGGER.debug("Serial Data: %s", data)
+                if data:
+                    for _, mux in MESSAGE_QUEUES.items():
+                        mux.put(data)
 
     if ser:
         ser.close()
 
-    LOGGER.debug("Exiting serial port listener thread for %s", port)
+    LOGGER.debug("Exiting serial port listener thread for %s", addr)
 
 
 def udp_worker(addr, mux=False):
-    """Send received data to the MUX UDP IP connection"""
-    # Create a UDP socket with broadcast address
+    """Send received data to the MUX UDP IP connection
+    Note: I have not implemented UDP input so this is Mux only
+    """
+    # Create a UDP MUX socket with broadcast address
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -133,7 +131,7 @@ def udp_worker(addr, mux=False):
             pass
 
         else:
-            LOGGER.debug("Sending to UDP MUX: %s, %s", NMEA_UDP_MUX, data)
+            LOGGER.debug("Sending to UDP MUX: %s, %s", addr, data)
             try:
                 sock.sendto(data, addr)
             except OSError as err:
@@ -290,49 +288,39 @@ def tcp_worker(addr, mux=False):
 def main():
     """Main program"""
 
-    # Start the TCP MUX thread handler
-    tcp_mux_thread = threading.Thread(
-        target=tcp_worker,
-        args=(NMEA_TCP_MUX, True)
-    )
-    tcp_mux_thread.daemon = True  # Kills the thread on main program exit
-    tcp_mux_thread.start()
-    tcp_mux_thread.name = "tcp_mux_thread"
-    THREAD_POOL.append(tcp_mux_thread)
+    for chan in cfg.CHANNELS:
+        if chan["type"] == "TCP":
+            # Start a TCP thread handler
+            tcp_thread = threading.Thread(
+                target=tcp_worker,
+                args=(chan["address"], chan["is_mux"])
+            )
+            tcp_thread.daemon = True  # Kills the thread on main program exit
+            tcp_thread.start()
+            tcp_thread.name = chan["name"]
+            THREAD_POOL.append(tcp_thread)
 
-    # Start the TCP Listener thread handler
-    tcp_input_thread = threading.Thread(
-        target=tcp_worker,
-        args=(INPUT_TCP_ADDRESS, False)
-    )
-    tcp_input_thread.daemon = True
-    tcp_input_thread.start()
-    tcp_input_thread.name = "tcp_input_thread_" + INPUT_TCP_ADDRESS[0]
-    THREAD_POOL.append(tcp_input_thread)
+        elif chan["type"] == "UDP":
+            # Start a UDP thread handler
+            udp_thread = threading.Thread(
+                target=udp_worker,
+                args=(chan["address"], chan["is_mux"])
+            )
+            udp_thread.daemon = True
+            udp_thread.start()
+            udp_thread.name = chan["name"]
+            THREAD_POOL.append(udp_thread)
 
-    # Start the UDP MUX thread handler
-    udp_mux_thread = threading.Thread(
-        target=udp_worker,
-        args=(NMEA_UDP_MUX, True)
-    )
-    udp_mux_thread.daemon = True
-    udp_mux_thread.start()
-    udp_mux_thread.name = "udp_mux_thread"
-    THREAD_POOL.append(udp_mux_thread)
-
-    # Start the serial port handler
-    # ser_thread = threading.Thread(
-    #     target=serial_port_worker,
-    #     args=(SERIAL_PORT, SERIAL_PORT_BAUD)
-    # )
-    # ser_thread.daemon = True
-    # ser_thread.start()
-    # ser_thread.name = "serial_port_thread"
-    # THREAD_POOL.append(ser_thread)
-
-    if DEBUG:
-        time.sleep(300)
-        STOP_THREADS.set()
+        elif chan["type"] == "SERIAL":
+            # Start a serial port handler
+            ser_thread = threading.Thread(
+                target=serial_port_worker,
+                args=(chan["address"], chan["baud"], chan['is_mux'])
+            )
+            ser_thread.daemon = True
+            ser_thread.start()
+            ser_thread.name = chan["name"]
+            THREAD_POOL.append(ser_thread)
 
     while not STOP_THREADS.is_set():
         time.sleep(1)
