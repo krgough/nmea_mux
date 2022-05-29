@@ -34,13 +34,13 @@ THREAD_POOL = []
 BUFFER_SIZE = 1024
 
 MESSAGE_QUEUES = {}
-MAX_QUEUE_SIZE = 3
+MAX_QUEUE_SIZE = 10
 
 
 def open_serial_port(port, baud):
     """Open the given serial port"""
     try:
-        ser = serial.Serial(port, baud, timeout=1)
+        ser = serial.Serial(port, baud, timeout=10)
         LOGGER.info("Serial port opened...%s", port)
     except IOError as err:
         LOGGER.error("Error opening port: %s", err)
@@ -63,21 +63,23 @@ def flush_queue(my_queue):
 
 def serial_port_worker(addr, baud, mux=False):
     """Listen for data on a serial port and send it to any mux channels"""
-    LOGGER.debug("Starting serial port on %s", addr)
+    LOGGER.debug("Starting serial port on %s,%s", addr, mux)
     ser = open_serial_port(port=addr, baud=baud)
     if ser is None:
         STOP_THREADS.set()
-    MESSAGE_QUEUES[addr] = queue.Queue(MAX_QUEUE_SIZE)
+    if mux:
+        MESSAGE_QUEUES[addr] = queue.Queue(MAX_QUEUE_SIZE)
 
     while not STOP_THREADS.is_set():
 
         if mux:
-            # Read from out message queue and send those to the serial port
+            # Read from our message queue and send those to the serial port
             try:
                 data = MESSAGE_QUEUES[addr].get(timeout=1)
+                LOGGER.debug("%s, %s", addr, mux)
             except queue.Empty:
-                pass
-
+                time.sleep(0.1)
+                LOGGER.debug("%s queue empty", addr)
             else:
                 LOGGER.debug("Sending to Serial MUX: %s, %s", addr, data)
                 try:
@@ -95,8 +97,8 @@ def serial_port_worker(addr, baud, mux=False):
             else:
                 LOGGER.debug("Serial Data: %s", data)
                 if data:
-                    for _, mux in MESSAGE_QUEUES.items():
-                        mux.put(data)
+                    for _, msg_q in MESSAGE_QUEUES.items():
+                        msg_q.put(data)
 
     if ser:
         ser.close()
@@ -324,6 +326,7 @@ def main():
 
     while not STOP_THREADS.is_set():
         time.sleep(1)
+        LOGGER.debug("Here")
 
     # If we get here then the stop event is set
     # Wait for all threads to stop

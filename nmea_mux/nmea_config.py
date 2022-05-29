@@ -14,7 +14,7 @@ TCP_MUX = {
 }
 
 UDP_MUX = {
-    "type": "UDP",
+   "type": "UDP",
     "is_mux": True,
     "address": ("255.255.255.255", NMEA_PORT),
     "name": "UDP MUX for Navionics or debug"
@@ -23,8 +23,8 @@ UDP_MUX = {
 SERIAL_MUX = {
     "type": "SERIAL",
     "is_mux": True,
-    # "address": "/dev/ttyS1",
-    "address": "/dev/tty.usbserial-FT9FV3Y3",
+    "address": "/dev/ttyS0",
+    # "address": "/dev/tty.usbserial-FT9FV3Y3",
     "baud": 4800,
     "name": "NMEA to instruments and VHF"
 }
@@ -47,17 +47,21 @@ GPS_LISTEN = {
 AIS_LISTEN = {
     "type": "SERIAL",
     "is_mux": False,
-    "address": "/dev/ttyS0",
-    "baud": 9600,
+    "address": "/dev/ttyS1",
+    "baud": 38400,
     "name": "AIS from VHF"
 }
 
 CHANNELS = [
-    TCP_MUX, SERIAL_MUX, # AIS_LISTEN, # GPS_LISTEN
+    # TCP_MUX,
+    SERIAL_MUX,
+    GPS_LISTEN,
+    AIS_LISTEN,
 ]
 
 TEST_CHANNELS = [
-    UDP_MUX, TCP_LISTEN
+    UDP_MUX,
+    # TCP_LISTEN
 ]
 
 if DEBUG:
