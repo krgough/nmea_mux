@@ -2,7 +2,7 @@
 
 # Configration data for NMEA Multiplexor
 
-DEBUG = True
+DEBUG = False
 INPUT_TCP_PORT = 5000
 NMEA_PORT = 10110
 
@@ -48,16 +48,19 @@ AIS_LISTEN = {
     "type": "SERIAL",
     "is_mux": False,
     "address": "/dev/ttyS0",
-    "baud": 9600,
+    "baud": 38400,
     "name": "AIS from VHF"
 }
 
 CHANNELS = [
-    TCP_MUX, SERIAL_MUX, # AIS_LISTEN, # GPS_LISTEN
+    UDP_MUX,
+    SERIAL_MUX,
+    AIS_LISTEN,
+    GPS_LISTEN
 ]
 
 TEST_CHANNELS = [
-    UDP_MUX, TCP_LISTEN
+    TCP_MUX, TCP_LISTEN
 ]
 
 if DEBUG:

@@ -3,12 +3,21 @@
 """ NMEA Multiplexor - Keith Gough, 30/04/2022
 
 Listen for NMEA/AIS strings on serial ports or IP sockets and re-transmit
-them on either TCP or broadcast using UDP.
+them on any combination of SERIAL NMEA and/or IP Sockets (UDP broadcast or
+TCP socket).
 
 Useful guidance here > https://steelkiwi.com/blog/working-tcp-sockets/
 
 
 """
+
+# TODO: Deal with lost socket connections and lost serial connections
+# TODO: Deal with no network and network lost during operation
+# TODO: Add file logging rather than console (file rotation)
+# TODO: Autostart on boat machine
+# TODO: Correct network selection - I think we need to be on our own
+# network rather than e.g. marina hotspot - need to consider how to
+# deal with that.
 
 import logging
 import queue
@@ -67,7 +76,8 @@ def serial_port_worker(addr, baud, mux=False):
     ser = open_serial_port(port=addr, baud=baud)
     if ser is None:
         STOP_THREADS.set()
-    MESSAGE_QUEUES[addr] = queue.Queue(MAX_QUEUE_SIZE)
+    if mux:
+        MESSAGE_QUEUES[addr] = queue.Queue(MAX_QUEUE_SIZE)
 
     while not STOP_THREADS.is_set():
 
@@ -95,8 +105,8 @@ def serial_port_worker(addr, baud, mux=False):
             else:
                 LOGGER.debug("Serial Data: %s", data)
                 if data:
-                    for _, mux in MESSAGE_QUEUES.items():
-                        mux.put(data)
+                    for _, msg_q in MESSAGE_QUEUES.items():
+                        msg_q.put(data)
 
     if ser:
         ser.close()
@@ -112,7 +122,8 @@ def udp_worker(addr, mux=False):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        MESSAGE_QUEUES[sock] = queue.Queue(MAX_QUEUE_SIZE)
+        if mux:
+            MESSAGE_QUEUES[sock] = queue.Queue(MAX_QUEUE_SIZE)
         LOGGER.debug("UDP socket created %s, mux=%s", addr, mux)
 
     except OSError as err:
@@ -210,6 +221,9 @@ def accept_or_read_from_socket(readable, server, mux, socks):
     # then we accept that connection and add it to the write_list
     # to be used for serving data to.
     for my_sock in readable:
+        # If the readable socket is out server socket then we accept
+        # any new connection.  If it's mux channel then we create a msg
+        # queue for the channel.
         if my_sock is server:
             conn, out_addr = my_sock.accept()
             # conn.setblocking(0)
@@ -224,6 +238,9 @@ def accept_or_read_from_socket(readable, server, mux, socks):
                 my_sock.getsockname(), mux, out_addr
             )
 
+        # In this case we have a readable socket that is not our
+        # listening server socket i.e. a socket with with incomming
+        # data.  Read the data and echo it out to all mux channel queues.
         else:
             data = my_sock.recv(1024)
             if data:
@@ -231,6 +248,9 @@ def accept_or_read_from_socket(readable, server, mux, socks):
                 for _, msg_q in MESSAGE_QUEUES.items():
                     msg_q.put(data)
             else:
+                # Mux channels are originaly "READ" until we accept them
+                # then they are also "WRITE" but we don't need to read
+                # from MUX channels so we remove them from the "READ" list
                 if my_sock in socks['write']:
                     socks['write'].remove(my_sock)
                     del MESSAGE_QUEUES[my_sock]
