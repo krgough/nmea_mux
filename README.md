@@ -35,5 +35,3 @@ Test data can be injected using the TCP socket on port 5000.
 ```
 nc localhost 5000
 ```
-
-junk junk
