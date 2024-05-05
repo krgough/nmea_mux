@@ -1,15 +1,26 @@
 #! /usr/bin/env python3
 
-# Configration data for NMEA Multiplexor
+""" Configuration data for NMEA Multiplexor
+"""
 
-DEBUG = False
 INPUT_TCP_PORT = 5000
 NMEA_PORT = 10110
+
+NMEA_BUS_BAUD = 4800
+NMEA_DEV = "/dev/ttyS0"
+# NMEA_PORT = "/dev/tty.usbserial-FT9FV3Y3",
+
+AIS_BAUD = 38400
+AIS_DEV = "/dev/ttyS1"
+
+GPS_BAUD = 4800
+GPS_DEV = "/dev/ttyUSB0"
+
 
 TCP_MUX = {
     "type": "TCP",
     "is_mux": True,
-    "address": ("", NMEA_PORT),
+    "address": ("localhost", NMEA_PORT),
     "name": "TCP MUX for Navionics"
 }
 
@@ -23,46 +34,39 @@ UDP_MUX = {
 SERIAL_MUX = {
     "type": "SERIAL",
     "is_mux": True,
-    # "address": "/dev/ttyS1",
-    "address": "/dev/tty.usbserial-FT9FV3Y3",
-    "baud": 4800,
+    "address": NMEA_DEV,
+    "baud": NMEA_BUS_BAUD,
     "name": "NMEA to instruments and VHF"
 }
 
 TCP_LISTEN = {
     "type": "TCP",
     "is_mux": False,
-    "address": ("", INPUT_TCP_PORT),
+    "address": ("localhost", INPUT_TCP_PORT),
     "name": "TCP MUX for Navionics"
 }
 
 GPS_LISTEN = {
     "type": "SERIAL",
     "is_mux": False,
-    "address": "/dev/ttyUSB0",
-    "baud": 4800,
+    "address": GPS_DEV,
+    "baud": GPS_BAUD,
     "name": "USB GPS"
 }
 
 AIS_LISTEN = {
     "type": "SERIAL",
     "is_mux": False,
-    "address": "/dev/ttyS0",
-    "baud": 38400,
+    "address": AIS_DEV,
+    "baud": AIS_BAUD,
     "name": "AIS from VHF"
 }
 
 CHANNELS = [
     UDP_MUX,
-    SERIAL_MUX,
-    AIS_LISTEN,
-    GPS_LISTEN
+    # SERIAL_MUX,
+    # AIS_LISTEN,
+    # GPS_LISTEN,
+    TCP_MUX,
+    TCP_LISTEN,
 ]
-
-TEST_CHANNELS = [
-    TCP_MUX, TCP_LISTEN
-]
-
-if DEBUG:
-    for chan in TEST_CHANNELS:
-        CHANNELS.append(chan)
