@@ -213,7 +213,7 @@ class UARTServer:
             else:
                 # Read from the port and put messages onto the mux queue
                 try:
-                    data = ser.readline()
+                    data = ser.readline().strip()
                 except serial.SerialException as err:
                     LOGGER.error("Serial port error %s: %s", self.port, err)
                     STOP_THREADS.set()
