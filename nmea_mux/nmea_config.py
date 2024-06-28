@@ -40,7 +40,7 @@ UART_MUX = {
     "is_mux": True,
     "port": NMEA_DEV,
     "baud": NMEA_BUS_BAUD,
-    "name": "UART MUX"
+    "name": "UART MUX",
     "address": "/dev/ttyS0",
     # "address": "/dev/tty.usbserial-FT9FV3Y3",
 }
@@ -73,7 +73,7 @@ CHANNELS = [
     UART_AIS_LISTEN,
     UART_GPS_LISTEN,
     UART_MUX,
-    TCP_LISTEN,
-    NAVIONICS_TCP,
+    #TCP_LISTEN,
+    TCP_NAVIONICS,
     # UDP_NAVIONICS
 ]
