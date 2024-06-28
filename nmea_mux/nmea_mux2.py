@@ -243,7 +243,7 @@ def reject_ais(data):
     de-clutter the display by ignoring stationary targets.
 
     """
-    LOGGER.debug("AIS_DECODE: ", data)
+    LOGGER.debug("AIS_DECODE: %s", data)
 
     if data.startswith(b"!AIVDM"):
         LOGGER.debug("ATTEMPTING DECODE...")
