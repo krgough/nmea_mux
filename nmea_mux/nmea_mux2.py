@@ -245,7 +245,7 @@ def reject_ais(data):
     """
     LOGGER.debug("AIS_DECODE: ", data)
 
-    if data.startswith("!AIVDM"):
+    if data.startswith(b"!AIVDM"):
         LOGGER.debug("ATTEMPTING DECODE...")
         try:
             ais = pyais.decode(data).asdict()
