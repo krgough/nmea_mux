@@ -222,6 +222,8 @@ class UARTServer:
                     if data:
                         DATA_QUEUE.put(data)
 
+            time.sleep(0.1)
+
         if ser:
             ser.close()
 
