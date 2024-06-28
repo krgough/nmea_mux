@@ -11,7 +11,8 @@ Useful guidance here > https://steelkiwi.com/blog/working-tcp-sockets/
 
 """
 
-# TODO: Deal with lost socket connections and lost serial connections
+# TODO: Deal with lost socket connections
+# TODO: Deal with lost serial connections
 # TODO: Deal with no network and network lost during operation
 # TODO: Add file logging rather than console (file rotation)
 # TODO: Autostart on boat machine
@@ -30,7 +31,6 @@ import serial
 
 import nmea_config as cfg
 
-DEBUG = True
 
 LOGGER = logging.getLogger(__name__)
 
