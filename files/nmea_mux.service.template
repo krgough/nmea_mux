@@ -1,0 +1,14 @@
+[Unit]
+Description=NMEA Multiplex Service
+StartLimitIntervalSec=0
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10s
+ExecStart=python3 secure_tunnel/nmea_mux2.py ## setup_nmea_mux.sh modifies this line
+
+[Install]
+WantedBy=multi-user.target
