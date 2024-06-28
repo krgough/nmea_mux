@@ -243,18 +243,20 @@ def reject_ais(data):
     de-clutter the display by ignoring stationary targets.
 
     """
-    try:
-        ais = pyais.decode(data).asdict()
-        LOGGER.debug("AIS: %s", ais)
-
-        if "speed" in ais and ais["speed"] < 0.5:
-            return True
-
-    except (
-        pyais.exceptions.UnknownMessageException,
-        pyais.exceptions.MissingMultipartMessageException
-    ):
-        pass
+    field_count = len(data.split(","))
+    if field_count == 7:
+        try:
+            ais = pyais.decode(data).asdict()
+            LOGGER.debug("AIS: %s", ais)
+    
+            if "speed" in ais and ais["speed"] < 0.5:
+                return True
+    
+        except (
+            pyais.exceptions.UnknownMessageException,
+            pyais.exceptions.MissingMultipartMessageException
+        ):
+            pass
 
     return False
 
