@@ -41,6 +41,8 @@ UART_MUX = {
     "port": NMEA_DEV,
     "baud": NMEA_BUS_BAUD,
     "name": "UART MUX"
+    "address": "/dev/ttyS0",
+    # "address": "/dev/tty.usbserial-FT9FV3Y3",
 }
 
 TCP_LISTEN = {
