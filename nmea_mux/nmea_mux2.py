@@ -243,8 +243,10 @@ def reject_ais(data):
     de-clutter the display by ignoring stationary targets.
 
     """
-    field_count = len(data.split(","))
-    if field_count == 7:
+    LOGGER.debug("AIS_DECODE: ", data)
+
+    if data.startswith("!AIVDM"):
+        LOGGER.debug("ATTEMPTING DECODE...)
         try:
             ais = pyais.decode(data).asdict()
             LOGGER.debug("AIS: %s", ais)
