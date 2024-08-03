@@ -47,6 +47,9 @@ STOP_THREADS.clear()
 
 LOGGER = logging.getLogger(__name__)
 
+MIN_SHIP_LENGTH = 10
+CACHE_PURGE_INTERVAL = 10  # Seconds
+
 
 class TCPServer(socketserver.TCPServer):
     """TCP Server socket.  Use is_mux to set the server as a multiplexer or not.
@@ -84,14 +87,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         while True:
             if self.server.is_mux:
-                if not self.server.mux_queue.empty():
-                    data = self.server.mux_queue.get()
-                    LOGGER.debug("%s: Sending to: %s: %s", self.server.name, self.client_address[0], data)
-                    try:
-                        self.request.sendall(data)
-                    except BrokenPipeError:
-                        LOGGER.error("%s: Connection from %s closed", self.server.name, self.client_address[0])
-                        break
+                data = self.server.mux_queue.get()
+                LOGGER.debug("%s: Sending to: %s: %s", self.server.name, self.client_address[0], data)
+                try:
+                    self.request.sendall(data)
+                except BrokenPipeError:
+                    LOGGER.error("%s: Connection from %s closed", self.server.name, self.client_address[0])
+                    break
 
             else:
                 try:
@@ -103,16 +105,19 @@ class TCPHandler(socketserver.BaseRequestHandler):
                     break
 
                 LOGGER.debug(
-                    "%s: Received from: %s: %s, timeout=%s",
+                    "%s: Received from: %s: %s",
                     self.server.name,
                     self.client_address[0],
-                    data,
-                    self.server.socket.gettimeout()
+                    data
                 )
-                if DATA_QUEUE.full():
-                    LOGGER.error("%s: Data queue full.  Dumping oldest message", self.server.name)
-                    DATA_QUEUE.get()
-                DATA_QUEUE.put(data)
+
+                # Only put data on the queue if it is not full
+                if not DATA_QUEUE.full():
+                    DATA_QUEUE.put(data)
+                else:
+                    LOGGER.error("DATA_QUEUE is full")
+
+            time.sleep(0.001)
 
     def finish(self):
         """Finish the request"""
@@ -146,7 +151,7 @@ class UDPServer(socketserver.UDPServer):
             except (BrokenPipeError, OSError) as err:
                 LOGGER.error("%s: Connection error = %s", self.name, err)
                 break
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def start_thread(self):
         """Start a thread to operate this socket"""
@@ -170,7 +175,8 @@ class UDPHandler(socketserver.BaseRequestHandler):
             data = self.request[0]
             sock = self.request[1]
             LOGGER.debug("%s: Connection from: %s. %s %s", self.server.name, self.client_address[0], data, sock)
-            DATA_QUEUE.put(data)
+            if not DATA_QUEUE.full():
+                DATA_QUEUE.put(data)
 
 
 class UARTServer:
@@ -219,10 +225,10 @@ class UARTServer:
                     STOP_THREADS.set()
                 else:
                     LOGGER.debug("Serial Data: %s", data)
-                    if data:
+                    if data and not DATA_QUEUE.full():
                         DATA_QUEUE.put(data)
 
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         if ser:
             ser.close()
@@ -238,7 +244,7 @@ class UARTServer:
         THREAD_POOL.append(ser_thread)
 
 
-def reject_ais(data):
+def reject_ais(data, mmsi_cache):
     """Returns true if the message is one we want to filter out
 
     We currently only filter AIS messages where speed=0 i.e. we want to
@@ -251,11 +257,31 @@ def reject_ais(data):
         LOGGER.debug("ATTEMPTING DECODE...")
         try:
             ais = pyais.decode(data).asdict()
-            LOGGER.debug("AIS: %s", ais)
-    
+            LOGGER.info("AIS: %s", ais)
+
+            if "mmsi" in ais:
+                # Get the ship length
+                mmsi = ais["mmsi"]
+                to_bow = ais.get("to_bow", 0)
+                to_stern = ais.get("to_stern", 0)
+                ship_length = to_bow + to_stern
+                if "to_stern" in ais:
+                    LOGGER.debug("TO STERN")
+
+                # Update the CACHE for ships with length data
+                if ship_length > 0:
+                    mmsi_cache[mmsi] = {"ship_length": ship_length, "timestamp": time.time()}
+                    LOGGER.debug("MMSI: %s, TIMESTAMP: %s", mmsi, mmsi_cache[mmsi]["timestamp"])
+
+            # Filter out stationary targets
             if "speed" in ais and ais["speed"] < 0.5:
                 return True
-    
+
+            # Filter out targets with
+            if "mmsi" in ais and ais["mmsi"] in mmsi_cache:
+                if mmsi_cache[ais["mmsi"]]["ship_length"] < MIN_SHIP_LENGTH:
+                    return True
+
         except (
             pyais.exceptions.UnknownMessageException,
             pyais.exceptions.MissingMultipartMessageException
@@ -265,8 +291,20 @@ def reject_ais(data):
     return False
 
 
+def purge_cache(mmsi_cache):
+    """Purge the MMSI_CACHE"""
+    mmsi_cache = {
+        mmsi: data
+        for mmsi, data in mmsi_cache.items()
+        if time.time() - data["timestamp"] < CACHE_PURGE_INTERVAL
+    }
+    return mmsi_cache
+
+
 def main():
     """Entry point"""
+
+    mmsi_cache = {}
 
     channels = []
     for channel in cfg.CHANNELS:
@@ -299,15 +337,31 @@ def main():
         THREAD_POOL.append(server)
         channels.append(server)
 
+    mux_chans = [chan for chan in channels if chan.is_mux]
+
     # Fill the mux channel queues with incomming data
-    max_chans = [chan for chan in channels if chan.is_mux]
+    cache_purge_ts = time.time()
     while not STOP_THREADS.is_set():
         # DATA_QUEUE.put(b"!AIVDM,1,1,,B,403Ow3AunWje:r6>:`Hc@u?026Bl,0*3A")
         # This blocks forever until there is data on the DATA_QUEUE to handle
-        data = DATA_QUEUE.get()
-        if not reject_ais(data):
-            for channel in max_chans:
-                channel.mux_queue.put(data)
+        data = None
+        if not DATA_QUEUE.empty():
+            data = DATA_QUEUE.get()
+
+        if data:
+            if not reject_ais(data=data, mmsi_cache=mmsi_cache):
+                for channel in mux_chans:
+                    if not channel.mux_queue.full():
+                        channel.mux_queue.put(data)
+                    else:
+                        LOGGER.error("MUX_QUEUE is full: %s", channel.name)
+
+        # Purge the MMSI_CACHE every so often
+        if time.time() - cache_purge_ts > CACHE_PURGE_INTERVAL:
+            LOGGER.info("MMSI_CACHE LEN: %s", len(mmsi_cache))
+            cache_purge_ts = time.time()
+            mmsi_cache = purge_cache(mmsi_cache=mmsi_cache)
+            LOGGER.info("MMSI_CACHE PURGED. LEN: %s", len(mmsi_cache))
 
         time.sleep(0.001)
 
@@ -315,5 +369,5 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     main()

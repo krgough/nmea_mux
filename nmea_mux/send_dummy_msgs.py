@@ -23,7 +23,7 @@ ADDRESS = ("127.0.0.1", 12000)
 # ADDRESS = ("192.168.1.144", 5000)
 
 FILENAME = "/Users/keithgough/Desktop/ais_data.txt"
-SEND_DURATION = 300
+SEND_DURATION = 5
 
 DUMMY_DATA = [
     b"!AIVDM,1,1,,B,403Ow3AunWje:r6>:`Hc@u?026Bl,0*3A",
@@ -46,10 +46,9 @@ def connect_and_send(data):
     """Connect to the server socket and send the data"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect(ADDRESS)
-        while True:
-            for msg in data:
-                time.sleep(0.1)
-                s.send(msg.encode("utf-8"))
+        for msg in data:
+            time.sleep(0.01)
+            s.send(msg.encode("utf-8"))
 
 
 def main():
@@ -63,9 +62,10 @@ def main():
     LOGGER.debug("Sending dummy data to %s", ADDRESS)
     LOGGER.debug("Sending data for %s seconds", SEND_DURATION)
 
-    end_time = time.time() + SEND_DURATION
-    while time < end_time:
-        connect_and_send(data)
+    connect_and_send(data)
+    # end_time = time.time() + SEND_DURATION
+    # while time.time() < end_time:
+    #     connect_and_send(data)
 
     LOGGER.debug("All done.")
 
