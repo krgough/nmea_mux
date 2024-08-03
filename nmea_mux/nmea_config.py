@@ -17,10 +17,7 @@ GPS_BAUD = 4800
 GPS_DEV = "/dev/ttyUSB0"
 
 ALL_NICS = "0.0.0.0"
-PHONE_IP = "KeithS22"
-PHONE_IP = "10.167.9.84"
-PHONE_IP = "192.168.100.229"
-ORAC_HOSTNAME = "orac.local"
+PHONE_IP = "_gateway"
 
 TCP_NAVIONICS = {
     "type": "TCP",
