@@ -370,7 +370,7 @@ def main():
             mmsi_cache.update_vessel(mmsi=mmsi, length=ship_length)
             reject = reject_ais(mmsi=mmsi, mmsi_cache=mmsi_cache, min_length=MIN_SHIP_LENGTH)
             if reject:
-                LOGGER.info("REJECTING: %s, %s, %s", mmsi, ship_length)
+                LOGGER.info("REJECTING: %s, %s", mmsi, ship_length)
             if not reject:
                 for channel in mux_chans:
                     if not channel.mux_queue.full():
