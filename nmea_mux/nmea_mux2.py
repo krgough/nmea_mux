@@ -58,7 +58,7 @@ STOP_THREADS.clear()
 
 LOGGER = logging.getLogger(__name__)
 
-MIN_SHIP_LENGTH = 10
+MIN_SHIP_LENGTH = 20
 CACHE_PURGE_INTERVAL = 10  # Seconds
 
 
