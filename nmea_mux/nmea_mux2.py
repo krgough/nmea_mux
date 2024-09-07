@@ -58,7 +58,7 @@ STOP_THREADS.clear()
 
 LOGGER = logging.getLogger(__name__)
 
-MIN_SHIP_LENGTH = 10
+MIN_SHIP_LENGTH = 20
 CACHE_PURGE_INTERVAL = 10  # Seconds
 
 
@@ -309,6 +309,7 @@ def reject_ais(mmsi, mmsi_cache, min_length):
     Reject messages from vessels for which we have no length
     """
     try:
+        LOGGER.info("Cache Length: %s", mmsi_cache[mmsi]["length"])
         if mmsi_cache[mmsi]["length"] < min_length:
             return True
 
