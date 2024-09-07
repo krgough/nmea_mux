@@ -15,7 +15,7 @@ In this case we have to tell the app the IP address of the device running the nm
 
 UDP: App listens on it's own IP on a given port for incoming data.  In the app we must specify
 the IP address of the device running the app or address 0.0.0.0.  In this case we have to tell
-the nmea_app the address of the device running the Navionics app.  This is possibly simplet as
+the nmea_app the address of the device running the Navionics app.  This is possibly simpler as
 we are likely using the mobile as a hotspot which has a known fixed ip address.
 
 UDP Listener is a UDP "server".  It listens for incoming UDP messages and sends them to the mux queue.
@@ -24,6 +24,17 @@ the response that address/port.  Navionics implements a UDP listener so we can s
 using a UDP client.
 
 We can also implement UDP listeners as an input port (e.g. for debug)
+
+
+mmsi =  Maritime Mobile Service Identity
+
+AIS Filtering Rules:
+
+1. Only show vessels that have a known length that is greater than a minimum length
+
+MMSI is in every message.  Length and vessel name are only sent occasionally.
+We can cache the mmsi, length and msg timestamp.
+If timestamp is old then remove it from the cache.
 
 """
 import logging
@@ -244,15 +255,34 @@ class UARTServer:
         THREAD_POOL.append(ser_thread)
 
 
-def reject_ais(data, mmsi_cache):
-    """Returns true if the message is one we want to filter out
+class MMSIcache:
+    """Class to handle the MMSI Cache"""
+    def __init__(self) -> None:
+        self.cache = {}
 
-    We currently only filter AIS messages where speed=0 i.e. we want to
-    de-clutter the display by ignoring stationary targets.
+    def update_vessel(self, mmsi, length=None):
+        """Add or update a vessel in the cache"""
+        if mmsi in self.cache:
+            # Update the vessel
+            if length:
+                self.cache[mmsi] = {"length": length, "timestamp": time.time()}
+            else:
+                self.cache[mmsi]["timestamp"] = time.time()
+        else:
+            self.cache[mmsi] = {"length": length, "timestamp": time.time()}
 
-    """
-    LOGGER.debug("AIS_DECODE: %s", data)
+    def purge(self, delete_age=60*60):
+        """Delete vessels if they have to been heard recently
+        delete_age = time in seconds.
+        If last message is older then delete this device.  Default is 1hr
+        """
+        self.cache = {k: v for k,v in self.cache.items() if v["timestamp"] < time.time() - delete_age}
 
+
+def parse_message(data):
+    """Parse mmsi and length from the message"""
+    mmsi = None
+    ship_length = None
     if data.startswith(b"!AIVDM"):
         LOGGER.debug("ATTEMPTING DECODE...")
         try:
@@ -265,46 +295,33 @@ def reject_ais(data, mmsi_cache):
                 to_bow = ais.get("to_bow", 0)
                 to_stern = ais.get("to_stern", 0)
                 ship_length = to_bow + to_stern
-                if "to_stern" in ais:
-                    LOGGER.debug("TO STERN")
-
-                # Update the CACHE for ships with length data
-                if ship_length > 0:
-                    mmsi_cache[mmsi] = {"ship_length": ship_length, "timestamp": time.time()}
-                    LOGGER.debug("MMSI: %s, TIMESTAMP: %s", mmsi, mmsi_cache[mmsi]["timestamp"])
-
-            # Filter out stationary targets
-            if "speed" in ais and ais["speed"] < 0.5:
-                return True
-
-            # Filter out targets with
-            if "mmsi" in ais and ais["mmsi"] in mmsi_cache:
-                if mmsi_cache[ais["mmsi"]]["ship_length"] < MIN_SHIP_LENGTH:
-                    return True
 
         except (
             pyais.exceptions.UnknownMessageException,
             pyais.exceptions.MissingMultipartMessageException
         ):
             pass
+    return mmsi, ship_length
+
+
+def reject_ais(mmsi, mmsi_cache, min_length):
+    """Returns true if the message is one we want to filter out
+    Reject messages from vessels for which we have no length
+    """
+    try:
+        if mmsi_cache[mmsi]["length"] < min_length:
+            return True
+
+    except (KeyError, TypeError):
+        return False
 
     return False
-
-
-def purge_cache(mmsi_cache):
-    """Purge the MMSI_CACHE"""
-    mmsi_cache = {
-        mmsi: data
-        for mmsi, data in mmsi_cache.items()
-        if time.time() - data["timestamp"] < CACHE_PURGE_INTERVAL
-    }
-    return mmsi_cache
 
 
 def main():
     """Entry point"""
 
-    mmsi_cache = {}
+    mmsi_cache = MMSIcache()
 
     channels = []
     for channel in cfg.CHANNELS:
@@ -340,7 +357,7 @@ def main():
     mux_chans = [chan for chan in channels if chan.is_mux]
 
     # Fill the mux channel queues with incomming data
-    cache_purge_ts = time.time()
+    last_purge_ts = time.time()
     while not STOP_THREADS.is_set():
         # DATA_QUEUE.put(b"!AIVDM,1,1,,B,403Ow3AunWje:r6>:`Hc@u?026Bl,0*3A")
         # This blocks forever until there is data on the DATA_QUEUE to handle
@@ -349,7 +366,9 @@ def main():
             data = DATA_QUEUE.get()
 
         if data:
-            if not reject_ais(data=data, mmsi_cache=mmsi_cache):
+            mmsi, ship_length = parse_message(data)
+            mmsi_cache.update_vessel(mmsi=mmsi, length=ship_length)
+            if not reject_ais(mmsi=mmsi, mmsi_cache=mmsi_cache, min_length=MIN_SHIP_LENGTH):
                 for channel in mux_chans:
                     if not channel.mux_queue.full():
                         channel.mux_queue.put(data)
@@ -357,11 +376,11 @@ def main():
                         LOGGER.error("MUX_QUEUE is full: %s", channel.name)
 
         # Purge the MMSI_CACHE every so often
-        if time.time() - cache_purge_ts > CACHE_PURGE_INTERVAL:
-            LOGGER.info("MMSI_CACHE LEN: %s", len(mmsi_cache))
-            cache_purge_ts = time.time()
-            mmsi_cache = purge_cache(mmsi_cache=mmsi_cache)
-            LOGGER.info("MMSI_CACHE PURGED. LEN: %s", len(mmsi_cache))
+        if time.time() - last_purge_ts > 10:
+            last_purge_ts = time.time()
+            LOGGER.info("MMSI_CACHE LEN: %s", len(mmsi_cache.cache))
+            mmsi_cache.purge(delete_age=60*60)
+            LOGGER.info("MMSI_CACHE PURGED. LEN: %s", len(mmsi_cache.cache))
 
         time.sleep(0.001)
 
