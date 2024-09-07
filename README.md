@@ -1,18 +1,31 @@
 # nmea_mux - NMEA Multiplexor
 
-Takes NMEA data from Serial Ports, TCP Sockets or UDP Sockets and Multiplex's that data out via a TCP socket on port 10110 and a UDP Broadcast on port 10110.
+Takes NMEA data from Serial Ports, TCP Sockets or UDP Sockets and Multiplex's that data out on any combination of TCP/UDP sockets or Serial Ports
 
 - Port 10110 is the standard port for NMEA data
 - Navionics can be setup to connect via TCP or UDP and listen to the multiplexed data.
 
+## Typical Configuation
+
 ```diagram
-VHF AIS NMEA Output via FTDI Cable __              __ NMEA Data on TCP port 10110
-                                     \            /
-TCP Socket on port 5000 ______________\___ Rpi __/___ NMEA Data on UDP Broadcast port 10110
-                                      /          \
-UDP Socket on port 10110 ____________/            \__ NMEA Data on Serial/FTDI to VHF (for DSC position)
-                                    /
-GPS Data via USB Serial ___________/
+                                                __ NMEA Data on UART to VHF (for DSC position)
+VHF AIS NMEA Output via UART _                /   and to Instruments (Position, SOG etc)
+                               \___ PC/Rpi __/  
+GPS Data via USB Serial  ______/             \
+                                              \__ NMEA Data on UDP socket port 10110 (Navionics)
+
+```
+
+## All supported
+
+```diagram
+NMEA on UART _____________                   _ NMEA Data on TCP socket
+                           \               /
+NMEA on TCP Socket _________\___ PC/Rpi __/___ NMEA Data on UDP socket
+                            /             \
+NMEA on UDP Socket ________/               \__ NMEA Data on Serial/FTDI
+                          /
+GPS Data via USB Serial _/
 ```
 
 ## For testing
