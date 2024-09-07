@@ -313,7 +313,8 @@ def reject_ais(mmsi, mmsi_cache, min_length):
         if mmsi_cache[mmsi]["length"] < min_length:
             return True
 
-    except (KeyError, TypeError):
+    except (KeyError, TypeError) as err:
+        LOGGER.info("Exception: %s", err)
         return False
 
     return False
