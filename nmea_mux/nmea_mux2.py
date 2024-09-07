@@ -287,7 +287,7 @@ def parse_message(data):
         LOGGER.debug("ATTEMPTING DECODE...")
         try:
             ais = pyais.decode(data).asdict()
-            LOGGER.info("AIS: %s", ais)
+            LOGGER.debug("AIS: %s", ais)
 
             if "mmsi" in ais:
                 # Get the ship length
@@ -372,6 +372,7 @@ def main():
             if reject:
                 LOGGER.info("REJECTING: %s, %s", mmsi, ship_length)
             if not reject:
+                LOGGER.info("ACCEPTING: %s, %s", mmsi, ship_length)
                 for channel in mux_chans:
                     if not channel.mux_queue.full():
                         channel.mux_queue.put(data)
