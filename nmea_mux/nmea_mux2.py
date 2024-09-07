@@ -58,7 +58,7 @@ STOP_THREADS.clear()
 
 LOGGER = logging.getLogger(__name__)
 
-MIN_SHIP_LENGTH = 20
+MIN_SHIP_LENGTH = 10
 CACHE_PURGE_INTERVAL = 10  # Seconds
 
 
@@ -276,7 +276,7 @@ class MMSIcache:
         delete_age = time in seconds.
         If last message is older then delete this device.  Default is 1hr
         """
-        self.cache = {k: v for k,v in self.cache.items() if v["timestamp"] < time.time() - delete_age}
+        self.cache = {k: v for k, v in self.cache.items() if v["timestamp"] < time.time() - delete_age}
 
 
 def parse_message(data):
@@ -368,7 +368,10 @@ def main():
         if data:
             mmsi, ship_length = parse_message(data)
             mmsi_cache.update_vessel(mmsi=mmsi, length=ship_length)
-            if not reject_ais(mmsi=mmsi, mmsi_cache=mmsi_cache, min_length=MIN_SHIP_LENGTH):
+            reject = reject_ais(mmsi=mmsi, mmsi_cache=mmsi_cache, min_length=MIN_SHIP_LENGTH)
+            if reject:
+                LOGGER.info("REJECTING: %s, %s, %s", mmsi, ship_length)
+            if not reject:
                 for channel in mux_chans:
                     if not channel.mux_queue.full():
                         channel.mux_queue.put(data)
