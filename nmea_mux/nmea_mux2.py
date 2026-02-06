@@ -49,7 +49,7 @@ import pyais
 import serial
 
 
-MAX_Q_SIZE = 100
+MAX_Q_SIZE = 1000
 DATA_QUEUE = Queue(maxsize=MAX_Q_SIZE)
 FILTERED_QUEUE = Queue(maxsize=MAX_Q_SIZE)
 THREAD_POOL = []
@@ -309,8 +309,8 @@ def reject_ais(mmsi, mmsi_cache, min_length):
     Reject messages from vessels for which we have no length
     """
     try:
-        LOGGER.info("Cache Length: %s", mmsi_cache[mmsi]["length"])
-        if mmsi_cache[mmsi]["length"] < min_length:
+        # LOGGER.info("Cache Length: %s", len(mmsi_cache.cache))
+        if mmsi_cache.cache[mmsi]["length"] and mmsi_cache.cache[mmsi]["length"] < min_length:
             return True
 
     except (KeyError, TypeError) as err:
@@ -374,7 +374,7 @@ def main():
             if reject:
                 LOGGER.info("REJECTING: %s, %s", mmsi, ship_length)
             if not reject:
-                LOGGER.info("ACCEPTING: %s, %s", mmsi, ship_length)
+                # LOGGER.info("ACCEPTING: %s, %s", mmsi, ship_length)
                 for channel in mux_chans:
                     if not channel.mux_queue.full():
                         channel.mux_queue.put(data)
